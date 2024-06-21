@@ -1,16 +1,17 @@
-# Hacking Modern Life's ChatGPT Clone
+#  Simplified Replica of the ChatGPT Interface
 
-## Hacking Modern Life
+## ChatGPT interface
 
-Don't forget to subscribe to the channel at https://youtube.com/@hml for digital life hacks, home automation and coding tutorials.
+The goal of this project is to develop a simplified replica of the ChatGPT interface using Nuxt 3, Vue, Tailwind CSS, and TypeScript. The application aims to demonstrate the ability to create a responsive and interactive chat interface.
 
 ## Setup
 
-Make sure to install the dependencies:
+Install the dependencies:
 
 ```bash
-# pnpm
-pnpm install
+# npm
+npm install
+
 ```
 
 ## Development Server
@@ -18,9 +19,9 @@ pnpm install
 Start the development server on http://localhost:3000
 
 ```bash
-pnpm dev
+npm run dev
+
 ```
 
-## Production
-
-It uses Google Cloud Run, and has a Dockerfile and cloudbuild.yaml to deploy it.
+## API
+Set API Key in the .env file

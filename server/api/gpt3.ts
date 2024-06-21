@@ -1,77 +1,89 @@
 import https from "https";
-import { LengthTransform } from "./transformers/LengthTransform";
 
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
-  const transform = new LengthTransform(30);
+  const openaiApiKey = config.private.OPENAI_API_KEY;
 
-  let prompt =
-    'The following is a conversation with an AI assistant trained by a YouTube channel called "Hacking Modern Life" or "HML" for short. ' +
-    "The assistant is helpful, creative, clever, and very friendly. The assistant always goes into details. " +
-    "The assistant provided very detailed explanations for his answers. Be very verbose. The assistant marks code with markdown. " +
-    "The assistant always provides code examples when it can.\n\n";
+  if (!openaiApiKey) {
+    return {
+      statusCode: 500,
+      message: 'OPENAI_API_KEY is not set in the environment variables.'
+    };
+  }
 
-  let messages = [
-    {
-      actor: "Human",
-      message: "Hello, how are you?",
-    },
-    {
-      actor: "AI",
-      message: "I am an AI created by HML. How can I help you today?",
-    },
-  ];
+  try {
+    const body = await readBody(event);
+    const messages = body.messages || [];
 
-  return new Promise((resolve, reject) => {
-    readBody(event).then((prevMessages) => {
-      messages = messages.concat(prevMessages);
-
-      // append message to prompt, taking message.actor as "actor:" followed by message.message
-      prompt +=
-        messages
-          .map((message) => `${message.actor}: ${message.message}`)
-          .join("\n") + `\nAI:`;
-
-      console.log({ prompt, prevMessages });
-
+    return new Promise((resolve, reject) => {
       const req = https.request(
         {
           hostname: "api.openai.com",
           port: 443,
-          path: "/v1/completions",
+          path: "/v1/chat/completions",
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${config.OPENAI_API_KEY}`,
+            Authorization: `Bearer ${openaiApiKey}`,
           },
         },
         (res) => {
-          console.log("Got response from GPT-3");
-          event.node.res.setHeader("Content-Type", "text/event-stream");
-          resolve(res.pipe(transform));
+          let data = '';
+          res.on('data', (chunk) => {
+            data += chunk;
+          });
+
+          res.on('end', () => {
+            try {
+              const json = JSON.parse(data);
+              if (json.error) {
+                reject({
+                  statusCode: res.statusCode,
+                  message: json.error.message,
+                });
+              } else {
+                resolve(json);
+              }
+            } catch (error) {
+              reject({
+                statusCode: 500,
+                message: "Invalid JSON response from OpenAI",
+                error: (error as Error).message,
+              });
+            }
+          });
         }
       );
 
-      const body = JSON.stringify({
-        model: "text-davinci-003",
-        prompt: prompt,
+      req.on("error", (e) => {
+        console.error("Request error:", e);
+        reject({
+          statusCode: 500,
+          message: "Problem with request: " + (e as Error).message,
+        });
+      });
+
+      req.write(JSON.stringify({
+        model: "gpt-3.5-turbo",
+        messages: messages.map((message: { actor: string; message: any; }) => ({
+          role: message.actor === "Human" ? "user" : "assistant",
+          content: message.message
+        })),
         temperature: 0.9,
         max_tokens: 512,
         top_p: 1.0,
         frequency_penalty: 0,
         presence_penalty: 0.6,
-        stop: [" Human:", " AI:"],
-        stream: true,
-      });
-
-      req.on("error", (e) => {
-        console.error(e);
-        reject("problem with request:" + e.message);
-      });
-
-      req.write(body);
+      }));
 
       req.end();
     });
-  });
+  } catch (error) {
+    console.error("Handler error:", error);
+    return {
+      statusCode: 500,
+      message: "An error occurred while processing the request.",
+      error: (error as Error).message
+    };
+  }
 });
